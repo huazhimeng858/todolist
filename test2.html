@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>表单</title>
+<script src="js/json2.js"></script>
+ <script src="js/jquery-2.1.4.min.js"></script>
+ <script src="js/underscore-min.js"></script>
+ <script src="js/backbone-min.js"></script>
+ <script src="js/backbone.localStorage.js"></script>
+<!-- <link rel="stylesheet" href="css/todos1.css"/> -->
+<style type="text/css">
+	* {
+		margin: 0px;
+		padding: 0px;
+	}
+	li {
+		list-style-type: none;
+	}
+	body {width: 1000px;margin: 0 auto;}
+	#nav {width: 930px;margin: 0 auto;}
+	.btn_content {width:930px;height: 50px;margin:20px 0 20px -15px;background-color: darkgoldenrod;border: 0;text-align: left;padding: 0;vertical-align: middle;font-size: 45px;}
+	#list {width:1000px;margin:0 auto;}
+	.li_nav {width: 1000px;height: 30px;margin: 10px auto;}
+	#box_total {width: 20px;height: 20px;float: left;border: 0;margin: 0 0 0 -35px;padding: 0;}
+	.end_btn {width:930px;height: 30px;margin: 0 0 0 20px;padding: 0;border: 0;background-color: #EEEED1;float: left;vertical-align: middle;font-size: 25px;}
+	.span-mark {width:930px;height: 30px;margin: 0 0 0 -15px;padding: 0;border: 0;background-color: #EEEED1;float: left;vertical-align: middle;font-size: 25px;}
+	.toggle {width:20px;height:20px;vertical-align: top;}
+	.list-text {width:930px;height:50px;display: inline-block;margin:0 0 10px -8px;line-height: 50px;background-color:  #CDAA7D;}
+	.destroy {width:50px;height:50px;background-image: url(images/tt.jpg);float: right;}
+	.edit{width:930px;height:50px;display: none;margin:0 0 10px -8px;line-height: 50px;background-color:  #CD7700;}
+	.done label{text-decoration: line-through;}
+</style>
+</head>
+<body id="todoapp">
+	<div id='nav'>
+		<input class="btn_content"/>
+		<div class="li_nav">
+			<input id="box_total" type="checkbox"/>
+			<div class="div_tolal"><span class="span-mark" >Mark all as complete</span></div> 
+		</div>
+	</div>
+	<ul id="list">			
+	</ul>
+	<div class="end_btn">
+		<span class="item_total">'+len+' items left'</span>
+		<input type="button" class="end-delete" value="Clear '+num' completed items " style="display:none"/>
+	</div>
+	<script type="text/javascript">
+	$(function(){
+		var Todo=Backbone.Model.extend({
+			defaults:function(){
+				return {
+					title:"empty todo...",
+					order:Todos.nextOrder(),
+					done:false
+				};
+				
+			},
+			toggle: function() {
+					this.save({done:!this.get("done")});
+			}
+		});
+		var TodoList=Backbone.Collection.extend({
+			model:Todo,
+			localStorage: new Backbone.LocalStorage("todos-backbonez"),
+			done:function(){
+				return this.where({done:true});
+			},
+			remaining:function(){
+				return this.where({done:false});
+			},
+			nextOrder:function(){
+				if(!this.length) return 1;
+				return this.last().get('order')+1;
+			},
+			comparator:'order'
+		});
+		var Todos=new TodoList;
+		var TodoView=Backbone.View.extend({
+			tagName:"li",
+			template:_.template($("#item-template").html()),
+			events:{
+				"click .toggle":"toggleDone",
+				"dblclick .list-text":"edit",
+				"click a.destroy":"clear",
+				"keypress .edit":"updateOnEnter",
+				"blur .edit":"close"
+			},
+			initialize:function(){
+				this.listenTo(this.model,"change",this.render);
+				this.listenTo(this.model,"destroy",this.remove);
+			},
+			render:function(){
+				this.$el.html(this.template(this.model.toJSON()));
+				this.$el.toggleClass('done', this.model.get('done'));
+				this.list_text=this.$('.list-text');
+			    this.input = this.$('.edit');
+			    return this;
+			},
+			toggleDone: function() {
+		    	this.model.toggle();
+		    },
+			edit: function() {
+				this.input.show();
+				this.list_text.hide();
+				this.input.focus();
+			},
+		    close: function() {
+		      	var value = this.input.val();
+		      	if (!value) {
+		        	this.clear();
+		      	} else {
+		        	this.model.save({title: value});
+					this.list_text.show();
+					this.input.hide();
+		      	}
+		    },
+		    updateOnEnter: function(e) {
+      			if (e.keyCode == 13) this.close();
+    		},
+    		clear: function() {
+      			this.model.destroy();
+    		}
+		});
+		var AppView = Backbone.View.extend({
+			el: $("#todoapp"),
+			statsTemplate: _.template($('#stats-template').html()),
+			events: {
+		      "keypress .btn_content":  "createOnEnter",
+		      "click #clear-completed": "clearCompleted",
+		      "click #box_total": "toggleAllComplete"
+		    },
+		    initialize: function() {
+		      this.input = this.$(".btn_content");
+		      this.allCheckbox = this.$("#box_total")[0];
+		      this.listenTo(Todos, 'add', this.addOne);
+		      this.listenTo(Todos, 'reset', this.addAll);
+		      this.listenTo(Todos, 'all', this.render);
+		      this.footer=$('.end_btn');
+		      this.main = $('.li_nav');
+		      Todos.fetch();
+		    },
+		    render: function() {
+		      var done = Todos.done().length;
+		      var remaining = Todos.remaining().length;
+		      if (Todos.length) {
+		        this.main.show();
+		         this.footer.show();
+		         this.footer.html(this.statsTemplate({done: done, remaining: remaining}));
+		      } else {
+		        this.main.hide();
+		         this.footer.hide();
+		      }
+		    },
+		    addOne: function(todo) {
+		      var view = new TodoView({model: todo});
+		      this.$("#list").append(view.render().el);
+		    },
+		    addAll: function() {
+		      Todos.each(this.addOne, this);
+		    },
+		    createOnEnter: function(e) {
+		      if (e.keyCode != 13) return;
+		      if (!this.input.val()) return;
+		      Todos.create({title: this.input.val()});
+		      this.input.val('');
+		    },
+		    clearCompleted: function() {
+		      _.invoke(Todos.done(), 'destroy');
+		      return false;
+		    },
+		    toggleAllComplete: function () {
+		      var done = this.allCheckbox.checked;
+		      Todos.each(function (todo) { todo.save({'done': done}); });
+		    }
+		  });
+		  var App = new AppView;
+		});
+
+	</script>
+	<script type="text/template" id="item-template">
+    <div class="view">
+      <input class="toggle" type="checkbox" <%= done ? 'checked="checked"' : '' %> />
+      <span class="list-text"><label><%- title %></label></span>
+		<input class="edit" type="text" value="<%- title %>" />
+      <a class="destroy"></a>
+    </div>
+
+  </script>
+
+  <script type="text/template" id="stats-template">
+    <% if (done) { %>
+      <a id="clear-completed">Clear <%= done %> completed <%= done == 1 ? 'item' : 'items' %></a>
+    <% } %>
+    <div class="todo-count"><b><%= remaining %></b> <%= remaining == 1 ? 'item' : 'items' %> left</div>
+  </script>
+</body>
+</html> 
